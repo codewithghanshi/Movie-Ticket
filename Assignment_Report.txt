@@ -1,0 +1,422 @@
+TCS-504 SYSTEM DESIGN — ASSIGNMENT 1
+MOVIE TICKET BOOKING SYSTEM
+Language: C++
+
+A. REQUIREMENT ANALYSIS
+
+Functional Requirements
+
+FR1 — Movie Listing: The system shall display all movies currently playing, including title, language and duration, when the customer selects the Movies option.
+
+FR2 — Show Listing: After a customer selects a movie, the system shall display all shows for that movie with screen number and start time.
+
+FR3 — Seat Display: After a customer selects a show, the system shall display every seat with its seat number, seat type and AVAILABLE/BOOKED status.
+
+FR4 — Booking: A customer selects one or more seat numbers for a show. If any selected seat is already BOOKED, the whole booking is rejected and no seat changes state. A booking is confirmed only after payment succeeds.
+
+FR5 — Pricing: The system shall calculate the booking amount from seat types using SILVER = Rs.150, GOLD = Rs.250 and PLATINUM = Rs.400.
+
+FR6 — Payment: Exactly one payment method (UPI, Card or Cash) shall be used per booking. If payment fails, seats are released and the booking status becomes FAILED.
+
+FR7 — Ticket Printing: After successful payment, the system shall print a ticket containing booking ID, movie, screen, start time, seat numbers, total amount and booking status.
+
+FR8 — Cancellation: A customer shall be able to cancel a confirmed booking using its booking ID, after which all seats belonging to that booking shall become AVAILABLE again.
+
+Non-Functional Requirements
+
+NFR1 — Modularity: Each class shall be implemented in its own .cpp file so that responsibilities remain separated.
+
+NFR2 — Extensibility: Adding another payment type should require a new Payment child class rather than changes to the existing payment implementations.
+
+NFR3 — Input Validation: Invalid menu choices, show choices, seat numbers, duplicate seats and invalid payment choices shall be rejected with a clear message without crashing.
+
+NFR4 — Maintainability: Functions should have one clear responsibility, use meaningful names, avoid magic numbers and keep repeated logic to a minimum.
+
+
+B. NOUN–VERB ANALYSIS
+
+| Noun found | Keep as a class? | Reason |
+| Movie | Yes | Has its own data and identity. |
+| Seat | Yes | Has number, type and price category. |
+| Seat layout | No | It is a view of a Show's seats, so it is a display method. |
+| Screen | Yes | Represents one auditorium and owns physical seats. |
+| Cinema | Yes | Represents the theatre and owns screens. |
+| Show | Yes | Represents one screening of a movie on a screen at a time. |
+| ShowSeat | Yes | Represents the status of one physical seat for one show. |
+| Customer | Yes | Stores customer identity data. |
+| Booking | Yes | Stores booking identity, selected seats, amount and status. |
+| Payment | Yes | Defines a common payment contract. |
+| UPI/Card/Cash | Yes | Each has its own payment behavior. |
+| Price | No | It is calculated behavior, handled by PriceCalculator. |
+| Ticket | No | The required system treats printing as a responsibility of TicketPrinter rather than a persistent entity. |
+| TicketPrinter | Yes | Has one responsibility: format and print tickets. |
+| BookingService | Yes | Orchestrates the booking flow. |
+| Cinema/main menu | Yes | The console menu and input flow are handled by the service/application entry point. |
+
+Important verbs and corresponding methods:
+list/display -> listMovies(), listShows(), displaySeats()
+select/choose -> input handling in BookingService
+book -> bookSeat(), createBooking()
+pay -> Payment::pay()
+calculate -> PriceCalculator::calculate()
+print -> TicketPrinter::print()
+cancel -> cancelBooking(), cancelSeat()
+
+
+C. CLASS RESPONSIBILITIES, DATA, METHODS AND MUST-NOT-DO
+
+Movie
+Knows: title, language, duration.
+Does: provide movie information.
+Must NOT: manage seats, bookings or payments.
+
+Seat
+Knows: seat number and seat type.
+Does: provide physical seat information.
+Must NOT: know booking status for a particular show.
+
+Screen
+Knows: screen number and its physical seats.
+Does: create/own seats and find a seat.
+Must NOT: manage bookings or payments.
+
+Cinema
+Knows: cinema name and screens.
+Does: create/own screens and find a screen.
+Must NOT: calculate booking prices.
+
+Show
+Knows: show ID, movie, screen, start time and ShowSeats.
+Does: represent a screening and display its seats.
+Must NOT: process payment or print tickets.
+
+ShowSeat
+Knows: one Seat and its status for one show.
+Does: validate/book/cancel that seat.
+Must NOT: calculate the whole booking amount.
+
+Customer
+Knows: name and phone.
+Does: provide customer information.
+Must NOT: directly change seat status.
+
+Booking
+Knows: booking ID, customer, show, selected ShowSeats, total amount and status.
+Does: maintain booking state.
+Must NOT: calculate prices or print tickets.
+
+Payment (abstract)
+Knows: payment contract.
+Does: define pay(amount).
+Must NOT: know booking seats or print tickets.
+
+UpiPayment/CardPayment/CashPayment
+Knows: its payment method.
+Does: perform its payment behavior.
+Must NOT: modify ShowSeat status directly.
+
+PriceCalculator
+Knows: seat-type prices.
+Does: calculate total amount.
+Must NOT: process payment or print tickets.
+
+TicketPrinter
+Knows: ticket formatting rules.
+Does: print a ticket.
+Must NOT: change booking state.
+
+BookingService
+Knows: movies, shows, bookings and service collaborators.
+Does: orchestrate menu and end-to-end booking/cancellation flow.
+Must NOT: contain payment-method-specific implementation or ticket-formatting logic.
+
+
+D. RELATIONSHIP TABLE
+
+| Pair | Choice | Justification using lifetime test |
+| Cinema — Screen | Composition | Cinema creates and owns its Screen objects. If the Cinema is destroyed, its owned Screens no longer exist in this model. |
+| Screen — Seat | Composition | Screen creates and owns its physical Seat objects. If the Screen is destroyed, those physical seats are destroyed with it. |
+| Show — Movie | Aggregation | A Show refers to an existing Movie. The Movie can exist independently and can be used by multiple Shows. |
+| Show — Screen | Association | A Show uses a Screen for a particular screening, but the Screen is an independently existing auditorium object. |
+| Show — ShowSeat | Composition | Show creates the ShowSeat objects for that particular screening. If the Show is destroyed, its ShowSeat objects no longer exist. |
+| Booking — Customer | Association | A Booking uses a Customer object; neither is the owner of the other's lifetime. |
+| Booking — ShowSeat | Aggregation | Booking stores references to ShowSeat objects that are owned by the Show. Destroying the Booking does not destroy those ShowSeats. |
+| Booking — Payment | Association | Payment performs a transaction for a Booking, but Payment is an independent service object and does not own the Booking. |
+| Payment — UpiPayment/CardPayment/CashPayment | Inheritance | The concrete payment classes are specialized implementations of the abstract Payment contract. |
+| BookingService — Booking | Aggregation | BookingService keeps confirmed bookings in a collection, but a Booking is an independent entity with its own identity. |
+
+
+E. CLASS DIAGRAM
+
+Use the following PlantUML code in a PlantUML renderer or draw.io-style UML tool. It represents the required classes, visibility, relationships and multiplicities.
+
+@startuml
+skinparam classAttributeIconSize 0
+
+class Movie {
+  - title : string
+  - language : string
+  - duration : int
+  + Movie(title, language, duration)
+  + getTitle() : string
+  + getLanguage() : string
+  + getDuration() : int
+}
+
+enum SeatType {
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+class Seat {
+  - number : string
+  - type : SeatType
+  + Seat(number, type)
+  + getNumber() : string
+  + getType() : SeatType
+  + getTypeName() : string
+}
+
+class Screen {
+  - screenNumber : int
+  - seats : vector<Seat>
+  + Screen(screenNumber)
+  + add/create seats
+  + findSeat(number) : Seat
+}
+
+class Cinema {
+  - name : string
+  - screens : vector<Screen>
+  + Cinema(name)
+  + addScreen(screenNumber)
+  + getScreen(screenNumber) : Screen
+}
+
+class Show {
+  - showId : int
+  - movie : Movie
+  - screen : Screen
+  - startTime : string
+  - showSeats : vector<ShowSeat>
+  + Show(...)
+  + findShowSeat(number) : ShowSeat
+  + displaySeats()
+}
+
+enum SeatStatus {
+  AVAILABLE
+  BOOKED
+}
+
+class ShowSeat {
+  - seat : Seat
+  - status : SeatStatus
+  + ShowSeat(seat)
+  + isAvailable() : bool
+  + bookSeat() : bool
+  + cancelSeat()
+}
+
+class Customer {
+  - name : string
+  - phone : string
+  + Customer(name, phone)
+  + getName() : string
+  + getPhone() : string
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+class Booking {
+  - nextBookingId : int {static}
+  - bookingId : string
+  - customer : Customer
+  - show : Show
+  - seats : vector<ShowSeat>
+  - totalAmount : double
+  - status : BookingStatus
+  + Booking(...)
+  + confirm()
+  + fail()
+  + cancel()
+}
+
+abstract class Payment {
+  + {abstract} pay(amount : double) : bool
+  + {abstract} methodName() : string
+}
+
+class UpiPayment {
+  + pay(amount) : bool
+}
+
+class CardPayment {
+  + pay(amount) : bool
+}
+
+class CashPayment {
+  + pay(amount) : bool
+}
+
+class PriceCalculator {
+  + calculate(seats) : double
+  + calculate(seat) : double
+}
+
+class TicketPrinter {
+  + print(booking)
+}
+
+class BookingService {
+  - movies
+  - shows
+  - bookings
+  - priceCalculator
+  - ticketPrinter
+  + run()
+}
+
+Cinema "1" *-- "1..*" Screen
+Screen "1" *-- "1..*" Seat
+Show "1" o-- "1" Movie
+Show "1" -- "1" Screen
+Show "1" *-- "1..*" ShowSeat
+ShowSeat "1" o-- "1" Seat
+Booking "1" -- "1" Customer
+Booking "1" o-- "1..*" ShowSeat
+Booking "1" -- "0..1" Payment
+Payment <|-- UpiPayment
+Payment <|-- CardPayment
+Payment <|-- CashPayment
+BookingService "1" o-- "0..*" Booking
+@enduml
+
+
+F. SEQUENCE DIAGRAM
+
+Use the following PlantUML code. It covers the required use case: customer books one seat and pays by UPI. It includes all required lifelines and create messages.
+
+@startuml
+actor Customer
+participant BookingService
+participant Show
+participant ShowSeat
+participant PriceCalculator
+participant Payment
+participant Booking
+participant TicketPrinter
+
+Customer -> BookingService : chooseShow(movieId, showId)
+activate BookingService
+BookingService -> Show : displaySeats()
+activate Show
+Show --> BookingService : seat layout
+deactivate Show
+BookingService --> Customer : available seats
+deactivate BookingService
+
+Customer -> BookingService : select seat A1
+activate BookingService
+BookingService -> Show : findShowSeat("A1")
+activate Show
+Show -> ShowSeat : isAvailable()
+activate ShowSeat
+ShowSeat --> Show : true
+deactivate ShowSeat
+Show --> BookingService : ShowSeat A1
+deactivate Show
+
+BookingService -> PriceCalculator : calculate([A1])
+activate PriceCalculator
+PriceCalculator --> BookingService : Rs.150
+deactivate PriceCalculator
+
+BookingService -> ShowSeat : bookSeat()
+activate ShowSeat
+ShowSeat --> BookingService : true
+deactivate ShowSeat
+
+create Booking
+BookingService -> Booking : create(customer, show, A1, 150)
+activate Booking
+Booking --> BookingService : Booking object
+deactivate Booking
+
+create Payment
+BookingService -> Payment : create UpiPayment
+activate Payment
+Payment --> BookingService : Payment object
+deactivate Payment
+
+BookingService -> Payment : pay(150)
+activate Payment
+Payment --> BookingService : true
+deactivate Payment
+
+BookingService -> Booking : confirm()
+BookingService -> TicketPrinter : print(booking)
+activate TicketPrinter
+TicketPrinter --> Customer : printed ticket
+deactivate TicketPrinter
+deactivate BookingService
+@enduml
+
+
+G. SOLID MAPPING
+
+1. Single Responsibility Principle (S)
+Booking does not print tickets. TicketPrinter owns ticket formatting/printing. PriceCalculator owns pricing. This separates reasons to change.
+
+2. Open/Closed Principle (O)
+Payment is abstract. A new payment method such as NetBanking can be added as a new Payment child without changing existing payment classes.
+
+3. Liskov Substitution Principle (L)
+UpiPayment, CardPayment and CashPayment implement the same Payment::pay() contract and can be used through a Payment pointer/reference.
+
+4. Dependency Inversion Principle (D)
+BookingService works with the Payment abstraction rather than depending on a specific payment implementation in its payment-processing logic. The selected concrete payment is supplied through the Payment base type.
+
+One thing deliberately NOT done:
+The design does not create a separate Refund interface or force every Payment class to support refund(), because the assignment does not require refunds. Adding unused behavior would make the Payment abstraction unnecessarily large.
+
+
+CLEAN-CODE CHECKLIST
+
+- Meaningful names such as bookedSeatCount, totalAmount and bookingId.
+- No list1/list2-style names.
+- Functions have focused responsibilities.
+- Constants are used for seat prices.
+- Ticket printing is not mixed with price calculation.
+- showSeats/displaySeats only displays state and does not book seats.
+- Payment behavior is not duplicated across all payment methods.
+- Input validation is included for invalid choices and seat numbers.
+
+
+DEMO RUN TO CAPTURE
+
+Demo 1 — Successful booking:
+Choose Book -> movie -> show -> A1 -> UPI.
+Expected: payment successful, booking confirmed, ticket printed.
+
+Demo 2 — Already booked:
+Try to book A1 again for the same show.
+Expected: "Seat A1 is already BOOKED. Booking rejected."
+
+Demo 3 — Failed payment:
+Choose an available seat -> choose "4. Test Failed Payment".
+Expected: payment failed, "Booking failed. Seats have been released."
+
+Demo 4 — Cancellation:
+Make a successful booking, note its Booking ID, choose Cancel, enter ID.
+Expected: "Booking cancelled. Seats are AVAILABLE again."
+
+Demo 5 — Invalid input:
+Enter an invalid menu choice or seat number.
+Expected: clear error message and program continues without crashing.
